@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timezone Text Converter</title>
+  <script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js" crossorigin="anonymous"></script>
+  <style>
+    img.emoji {
+      height: 1.25em;
+      width: 1.25em;
+      vertical-align: -0.25em;
+      display: inline-block;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+      padding: 28px 16px;
+    }
+    .container { max-width: 860px; margin: 0 auto; }
+    header { margin-bottom: 24px; }
+    header h1 { font-size: 1.55rem; font-weight: 700; color: #2d2d44; }
+    header p { margin-top: 6px; color: #666; font-size: 0.88rem; line-height: 1.5; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 18px;
+    }
+    .card label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: #444;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    textarea {
+      width: 100%;
+      height: 160px;
+      border: 1.5px solid #d0d5e0;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: vertical;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      color: #222;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #5c6bc0;
+      box-shadow: 0 0 0 3px rgba(92,107,192,0.13);
+    }
+    .hint { font-size: 0.79rem; color: #888; margin-top: 7px; line-height: 1.5; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .btn-generate {
+      background: #5c6bc0;
+      color: #fff;
+      border: none;
+      padding: 10px 30px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      letter-spacing: 0.02em;
+    }
+    .btn-generate:hover { background: #4a59b3; }
+    .btn-generate:active { background: #3c4a9f; }
+    .dst-badge {
+      font-size: 0.78rem;
+      color: #666;
+      background: #f5f5fa;
+      border: 1px solid #e0e0ee;
+      padding: 5px 12px;
+      border-radius: 20px;
+      line-height: 1.4;
+    }
+    .dst-badge b { color: #333; }
+    .warn-banner {
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #795548;
+      margin-bottom: 14px;
+      display: none;
+    }
+    #outputs { display: none; }
+    .output-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 22px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 14px;
+    }
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .zone-info { display: flex; align-items: center; gap: 10px; }
+    .zone-flag { font-size: 1.35rem; line-height: 1; }
+    .zone-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .zone-label { font-weight: 700; font-size: 0.97rem; color: #2d2d44; }
+    .zone-abbr {
+      font-size: 0.78rem;
+      background: #eef0fb;
+      color: #5c6bc0;
+      border-radius: 5px;
+      padding: 2px 8px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .zone-offset { font-size: 0.76rem; color: #aaa; }
+    .btn-copy {
+      background: transparent;
+      color: #5c6bc0;
+      border: 1.5px solid #5c6bc0;
+      border-radius: 7px;
+      padding: 6px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-copy:hover { background: #eef0fb; }
+    .btn-copy.copied { color: #2e7d32; border-color: #4caf50; background: #f1f8f1; }
+    .output-text {
+      width: 100%;
+      min-height: 90px;
+      border: 1.5px solid #e8eaf0;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.93rem;
+      font-family: inherit;
+      line-height: 1.65;
+      background: #fafbfd;
+      color: #333;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      cursor: text;
+    }
+    .match-count {
+      font-size: 0.78rem;
+      color: #5c6bc0;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Timezone Text Converter</h1>
+      <p>Paste text containing timestamps in <strong>CST</strong> or <strong>IST</strong> — instantly get five timezone-converted versions ready to copy and share.</p>
+    </header>
+
+    <div class="card">
+      <label for="inputText">Your text with timestamps</label>
+      <textarea id="inputText" placeholder="Example:&#10;Join us on Tuesday at 10:00 AM CST for the team sync.&#10;Register at https://example.com/register before Monday.&#10;&#10;Session 2 starts at 2:30 PM CST / 1:00 AM IST (next day)."></textarea>
+      <p class="hint">
+        Detected formats: <code>10:00 AM CST</code> &nbsp;·&nbsp; <code>2:30 PM IST</code> &nbsp;·&nbsp; <code>14:30 CST</code> &nbsp;·&nbsp; <code>8:30 PM – 9:30 PM IST</code><br>
+        Supported input zones: CST/CDT, IST, EST/EDT, MST/MDT, PST/PDT, CET/CEST
+      </p>
+      <div class="toolbar">
+        <button class="btn-generate" onclick="generate()">Generate</button>
+        <div class="dst-badge" id="dstBadge">Calculating DST…</div>
+      </div>
+    </div>
+
+    <div class="warn-banner" id="warnBanner">
+      No timestamps were detected in your text. Make sure times include a timezone abbreviation (e.g. <strong>10:00 AM CST</strong> or <strong>3:30 PM IST</strong>).
+    </div>
+
+    <div id="outputs"></div>
+  </div>
+
+  <script>
+    // ── DST helpers ──────────────────────────────────────────────────────
+
+    function nthSundayOfMonth(year, month0, n) {
+      // nth Sunday (1-based) in month (0-based Jan=0)
+      const d = new Date(year, month0, 1);
+      const offset = (7 - d.getDay()) % 7; // days until first Sunday
+      return 1 + offset + (n - 1) * 7;
+    }
+
+    function lastSundayOfMonth(year, month0) {
+      const last = new Date(year, month0 + 1, 0); // last day of month
+      return last.getDate() - last.getDay();
+    }
+
+    function isUSDST(date) {
+      const y = date.getFullYear();
+      // Starts: 2nd Sunday in March at 2:00 AM local
+      const start = new Date(y, 2, nthSundayOfMonth(y, 2, 2), 2, 0, 0);
+      // Ends:   1st Sunday in November at 2:00 AM local
+      const end   = new Date(y, 10, nthSundayOfMonth(y, 10, 1), 2, 0, 0);
+      return date >= start && date < end;
+    }
+
+    function isEUDST(date) {
+      const y = date.getFullYear();
+      // Starts: last Sunday in March at 2:00 AM local
+      const start = new Date(y, 2, lastSundayOfMonth(y, 2), 2, 0, 0);
+      // Ends:   last Sunday in October at 3:00 AM local
+      const end   = new Date(y, 9, lastSundayOfMonth(y, 9), 3, 0, 0);
+      return date >= start && date < end;
+    }
+
+    // ── Offset / abbreviation lookups ────────────────────────────────────
+
+    function getOffset(zoneId, usDST, euDST) {
+      // Returns minutes east of UTC
+      switch (zoneId) {
+        case 'IST': return 330;
+        case 'ET':  return usDST ? -240 : -300;
+        case 'CT':  return usDST ? -300 : -360;
+        case 'MT':  return usDST ? -360 : -420;
+        case 'PT':  return usDST ? -420 : -480;
+        case 'CET': return euDST ?  120 :   60;
+      }
+      return 0;
+    }
+
+    function getAbbr(zoneId, usDST, euDST) {
+      switch (zoneId) {
+        case 'IST': return 'IST';
+        case 'ET':  return usDST ? 'EDT' : 'EST';
+        case 'CT':  return usDST ? 'CDT' : 'CST';
+        case 'MT':  return usDST ? 'MDT' : 'MST';
+        case 'PT':  return usDST ? 'PDT' : 'PST';
+        case 'CET': return euDST ? 'CEST' : 'CET';
+      }
+      return zoneId;
+    }
+
+    // Input abbreviation → UTC offset using current DST status.
+    // Treat all regional abbreviations (CST/CDT/EST/EDT…) as their
+    // timezone *family* and apply DST based on current date — matching
+    // how people actually write meeting invites.
+    function inputToOffset(abbr, usDST, euDST) {
+      switch (abbr.toUpperCase()) {
+        case 'IST':                          return 330;
+        case 'ET':  case 'EST': case 'EDT':  return usDST ? -240 : -300;
+        case 'CT':  case 'CST': case 'CDT':  return usDST ? -300 : -360;
+        case 'MT':  case 'MST': case 'MDT':  return usDST ? -360 : -420;
+        case 'PT':  case 'PST': case 'PDT':  return usDST ? -420 : -480;
+        case 'CET': case 'CEST':             return euDST ?  120 :   60;
+      }
+      return null;
+    }
+
+    function offsetLabel(min) {
+      const sign = min >= 0 ? '+' : '-';
+      const a = Math.abs(min);
+      return 'UTC' + sign + String(Math.floor(a / 60)).padStart(2, '0') + ':' + String(a % 60).padStart(2, '0');
+    }
+
+    // ── Conversion core ──────────────────────────────────────────────────
+
+    function parseH24(timeStr, ampmStr) {
+      const [hRaw, mRaw = '0'] = timeStr.split(':');
+      let h = parseInt(hRaw, 10);
+      const m = parseInt(mRaw, 10);
+      if (ampmStr) {
+        const pm = /pm/i.test(ampmStr);
+        const am = /am/i.test(ampmStr);
+        if (pm && h !== 12) h += 12;
+        if (am && h === 12) h = 0;
+      }
+      return { h, m };
+    }
+
+    function convertTime(timeStr, ampmStr, fromAbbr, toZoneId, usDST, euDST) {
+      const fromOff = inputToOffset(fromAbbr, usDST, euDST);
+      if (fromOff === null) return null;
+
+      const { h, m } = parseH24(timeStr, ampmStr);
+      const toOff = getOffset(toZoneId, usDST, euDST);
+
+      let totalMin = h * 60 + m - fromOff + toOff;
+      const dayShift = totalMin < 0 ? -1 : totalMin >= 1440 ? 1 : 0;
+      totalMin = ((totalMin % 1440) + 1440) % 1440;
+
+      const outH24 = Math.floor(totalMin / 60);
+      const outMin = totalMin % 60;
+      const ampm   = outH24 < 12 ? 'AM' : 'PM';
+      let   h12    = outH24 % 12;
+      if (h12 === 0) h12 = 12;
+
+      const outAbbr = getAbbr(toZoneId, usDST, euDST);
+      const dayNote = dayShift ===  1 ? ' (+1d)'
+                    : dayShift === -1 ? ' (-1d)' : '';
+
+      return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ampm + ' ' + outAbbr + dayNote;
+    }
+
+    // ── Text processing ──────────────────────────────────────────────────
+
+    // Timezone alternatives — longer first so alternation is unambiguous
+    const TZ = 'CEST|CDT|EDT|MDT|PDT|IST|CST|EST|MST|PST|CET|CT|ET|MT|PT';
+
+    // Human-readable label and flag for each output zone
+    const TARGET_LABEL = {
+      IST: 'India Standard Time',
+      ET:  'US Eastern Time',
+      CT:  'US Central Time',
+      MT:  'US Mountain Time',
+      PT:  'US Pacific Time',
+      CET: 'Central European Time',
+    };
+
+    const ZONE_FLAG = {
+      IST: '\u{1F1EE}\u{1F1F3}', // 🇮🇳
+      ET:  '\u{1F1FA}\u{1F1F8}', // 🇺🇸
+      CT:  '\u{1F1FA}\u{1F1F8}', // 🇺🇸
+      MT:  '\u{1F1FA}\u{1F1F8}', // 🇺🇸
+      PT:  '\u{1F1FA}\u{1F1F8}', // 🇺🇸
+      CET: '\u{1F1E9}\u{1F1EA}', // 🇩🇪
+    };
+
+    // Single-pass label replacement — longer patterns are listed first so they
+    // win over their shorter sub-phrases in regex alternation, preventing
+    // "India Time" from being re-processed after already being matched.
+    function replaceZoneLabels(text, toZoneId, usDST, euDST) {
+      const label      = TARGET_LABEL[toZoneId];
+      const targetAbbr = getAbbr(toZoneId, usDST, euDST);
+      const targetFlag = ZONE_FLAG[toZoneId];
+
+      // Optional flag+space prefix consumed together with the phrase so the flag
+      // is never doubled when input already has one (e.g. "🇮🇳 India Time" → one match)
+      const FLAG     = '[\\u{1F1E0}-\\u{1F1FF}]{2}';
+      const OPT_FLAG = '(?:' + FLAG + '\\s+)?';
+
+      const PHRASES = [
+        'Central\\s+European\\s+(?:Standard|Summer)\\s+Time',
+        'Eastern\\s+(?:Standard|Daylight)\\s+Time',
+        'Central\\s+(?:Standard|Daylight)\\s+Time',
+        'Mountain\\s+(?:Standard|Daylight)\\s+Time',
+        'Pacific\\s+(?:Standard|Daylight)\\s+Time',
+        'India\\s+Standard\\s+Time',
+        'Central\\s+European\\s+Time',
+        'US\\s+Eastern\\s+Time',
+        'US\\s+Central\\s+Time',
+        'US\\s+Mountain\\s+Time',
+        'US\\s+Pacific\\s+Time',
+        'Eastern\\s+Time',
+        'Central\\s+Time',
+        'Mountain\\s+Time',
+        'Pacific\\s+Time',
+        'India\\s+Time',
+      ];
+
+      const WORDS = ['India', 'Germany', 'Eastern', 'Central', 'Mountain', 'Pacific'];
+
+      const combined = new RegExp([
+        // Optional flag + full phrase → one match → always outputs flag + label
+        OPT_FLAG + '(?:' + PHRASES.join('|') + ')',
+        // Optional flag + single region word → one match → flag + label
+        OPT_FLAG + '\\b(?:' + WORDS.join('|') + ')\\b',
+        // Standalone flag alone (when not immediately before a phrase/word)
+        FLAG,
+        // Abbreviations in parentheses (2-letter included)
+        '\\((?:CEST|CDT|EDT|MDT|PDT|IST|CST|EST|MST|PST|CET|CT|ET|MT|PT)\\)',
+        // Standalone 3+ letter timezone abbreviations
+        '\\b(?:CEST|CDT|EDT|MDT|PDT|IST|CST|EST|MST|PST|CET)\\b',
+      ].join('|'), 'giu');
+
+      return text.replace(combined, (match) => {
+        // Pure standalone flag (match is exactly 2 regional-indicator chars)
+        if (/^[\u{1F1E0}-\u{1F1FF}]{2}$/u.test(match)) return targetFlag;
+        // Paren abbreviation → (targetAbbr)
+        if (match.startsWith('(')) return '(' + targetAbbr + ')';
+        // Standalone TZ abbreviation (all-caps 2-4 letter code)
+        if (/^(?:CEST|CDT|EDT|MDT|PDT|IST|CST|EST|MST|PST|CET|CT|ET|MT|PT)$/i.test(match)) return targetAbbr;
+        // Phrase or region word (with or without leading flag) → flag + label
+        return targetFlag + ' ' + label;
+      });
+    }
+
+    function makePattern() {
+      const TIME = '\\d{1,2}(?::\\d{2})?';
+      const AMPM = '[AaPp][Mm]';
+      const SEP  = '[\\u2013\\u2014\\-]'; // en dash, em dash, hyphen
+      return new RegExp(
+        // (A) Range: "start [AMPM] – end AMPM TZ"  e.g. "8:30 PM – 9:30 PM IST"
+        '\\b(' + TIME + ')\\s*(' + AMPM + ')?\\s*' + SEP + '\\s*(' + TIME + ')\\s*(' + AMPM + ')\\s+(' + TZ + ')\\b' +
+        '|' +
+        // (B) Single with AM/PM: "time AMPM TZ"
+        '\\b(' + TIME + ')\\s*(' + AMPM + ')\\s+(' + TZ + ')\\b' +
+        '|' +
+        // (C) Single HH:MM [AMPM] TZ (colon required to avoid "3 IST" false-positive)
+        '\\b(\\d{1,2}:\\d{2})\\s*(' + AMPM + ')?\\s+(' + TZ + ')\\b',
+        'g'
+      );
+    }
+
+    function processText(text, toZoneId, usDST, euDST) {
+      // Pass 1: convert timestamps
+      const timesConverted = text.replace(makePattern(), (match,
+        r_t1, r_ap1, r_t2, r_ap2, r_tz,   // (A) range groups
+        s_t,  s_ap,  s_tz,                 // (B) single+AMPM groups
+        h_t,  h_ap,  h_tz                  // (C) HH:MM groups
+      ) => {
+        if (r_t1 !== undefined) {
+          // For ranges where start has no AM/PM, inherit from end (e.g. "8:30 – 9:30 PM IST")
+          const startAP = r_ap1 || r_ap2;
+          const start = convertTime(r_t1, startAP, r_tz, toZoneId, usDST, euDST);
+          const end   = convertTime(r_t2, r_ap2,   r_tz, toZoneId, usDST, euDST);
+          return (start && end) ? start + ' – ' + end : match;
+        }
+        if (s_t !== undefined) {
+          return convertTime(s_t, s_ap, s_tz, toZoneId, usDST, euDST) || match;
+        }
+        return convertTime(h_t, h_ap, h_tz, toZoneId, usDST, euDST) || match;
+      });
+      // Pass 2: replace timezone label phrases and standalone abbreviations
+      return replaceZoneLabels(timesConverted, toZoneId, usDST, euDST);
+    }
+
+    function countMatches(text) {
+      return (text.match(makePattern()) || []).length;
+    }
+
+    // ── Zone definitions ─────────────────────────────────────────────────
+
+    const ZONES = [
+      { id: 'IST', label: 'India Standard Time',             flag: '🇮🇳' },
+      { id: 'ET',  label: 'US Eastern Time',                 flag: '🇺🇸' },
+      { id: 'CT',  label: 'US Central Time',                 flag: '🇺🇸' },
+      { id: 'MT',  label: 'US Mountain Time',                flag: '🇺🇸' },
+      { id: 'PT',  label: 'US Pacific Time',                flag: '🇺🇸' },
+      { id: 'CET', label: 'Central European Time (Germany)', flag: '🇩🇪' },
+    ];
+
+    // ── Bootstrap ────────────────────────────────────────────────────────
+
+    const _now   = new Date();
+    const _usDST = isUSDST(_now);
+    const _euDST = isEUDST(_now);
+
+    (function updateDSTBadge() {
+      const fmt = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const usLabel = _usDST ? '<b style="color:#2e7d32">DST on</b>' : '<b style="color:#c62828">DST off</b>';
+      const euLabel = _euDST ? '<b style="color:#2e7d32">DST on</b>' : '<b style="color:#c62828">DST off</b>';
+      document.getElementById('dstBadge').innerHTML =
+        `US: ${usLabel} &nbsp;·&nbsp; EU: ${euLabel} &nbsp;·&nbsp; ${fmt}`;
+    })();
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    // ── Generate ─────────────────────────────────────────────────────────
+
+    function generate() {
+      const input = document.getElementById('inputText').value;
+      if (!input.trim()) {
+        alert('Please enter some text first.');
+        return;
+      }
+
+      const warn = document.getElementById('warnBanner');
+      const n    = countMatches(input);
+      warn.style.display = n === 0 ? 'block' : 'none';
+
+      const container = document.getElementById('outputs');
+      container.style.display = 'block';
+      container.innerHTML = '';
+
+      if (n > 0) {
+        const countEl = document.createElement('div');
+        countEl.className = 'match-count';
+        countEl.textContent = n + ' timestamp' + (n === 1 ? '' : 's') + ' detected — converted across 5 timezones below.';
+        container.appendChild(countEl);
+      }
+
+      ZONES.forEach(zone => {
+        const converted = processText(input, zone.id, _usDST, _euDST);
+        const abbr      = getAbbr(zone.id, _usDST, _euDST);
+        const offset    = getOffset(zone.id, _usDST, _euDST);
+        const uid       = 'out-' + zone.id;
+
+        const card   = document.createElement('div');
+        card.className = 'output-card';
+
+        const header = document.createElement('div');
+        header.className = 'output-header';
+        header.innerHTML =
+          '<div class="zone-info">' +
+            '<span class="zone-flag">' + zone.flag + '</span>' +
+            '<div class="zone-text">' +
+              '<span class="zone-label">' + zone.label + '</span>' +
+              '<span class="zone-abbr">'  + abbr + '</span>' +
+              '<span class="zone-offset">' + offsetLabel(offset) + '</span>' +
+            '</div>' +
+          '</div>';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-copy';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => copyOutput(uid, copyBtn));
+        header.appendChild(copyBtn);
+
+        const out = document.createElement('div');
+        out.className       = 'output-text';
+        out.id              = uid;
+        out.dataset.plain   = converted;                     // plain text for copying
+        out.innerHTML       = escapeHtml(converted);         // set as escaped HTML first
+        twemoji.parse(out, { folder: 'svg', ext: '.svg' }); // then render emoji as images
+
+        card.appendChild(header);
+        card.appendChild(out);
+        container.appendChild(card);
+      });
+
+      // Also re-parse the card headers (zone flags)
+      twemoji.parse(container, { folder: 'svg', ext: '.svg' });
+
+      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ── Copy ─────────────────────────────────────────────────────────────
+
+    function copyOutput(id, btn) {
+      const text = document.getElementById(id).dataset.plain || '';
+
+      // execCommand is synchronous and works in all contexts (file://, http, https)
+      const tmp = document.createElement('textarea');
+      tmp.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+      tmp.value = text;
+      document.body.appendChild(tmp);
+      tmp.focus();
+      tmp.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(tmp);
+
+      if (ok) {
+        flashCopied(btn);
+      } else if (navigator.clipboard) {
+        // Async clipboard API as fallback (requires https)
+        navigator.clipboard.writeText(text)
+          .then(() => flashCopied(btn))
+          .catch(() => alert('Copy failed — please select and copy the text manually.'));
+      }
+    }
+
+    function flashCopied(btn) {
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    }
+
+    // Allow Tab key to move focus out of input textarea
+    document.getElementById('inputText').addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        document.querySelector('.btn-generate').focus();
+      }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        generate();
+      }
+    });
+  </script>
+</body>
+</html>
