@@ -208,6 +208,18 @@
       white-space: nowrap;
     }
     .tz-now.show { display: inline-block; }
+    .preview-card {
+      border: 2px solid #eef0fb;
+    }
+    .preview-zone-note {
+      font-size: 0.76rem;
+      color: #8896c8;
+      font-style: italic;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
@@ -238,6 +250,8 @@
         </div>
       </div>
     </div>
+
+    <div id="previewCard"></div>
 
     <div class="warn-banner" id="warnBanner">
       No timestamps were detected in your text. Make sure times include a timezone abbreviation (e.g. <strong>10:00 AM CST</strong> or <strong>3:30 PM IST</strong>).
@@ -328,6 +342,17 @@
       return 'UTC' + sign + String(Math.floor(a / 60)).padStart(2, '0') + ':' + String(a % 60).padStart(2, '0');
     }
 
+    // Returns "(Mon, May 11)" for +1 day from today, "(Sat, May 9)" for -1, "" for 0.
+    // Uses today as the reference since input text only carries time, not date.
+    function shiftDayLabel(shift) {
+      if (shift === 0) return '';
+      const d = new Date(_now);
+      d.setDate(d.getDate() + shift);
+      const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const mon = d.toLocaleDateString('en-US', { month: 'short' });
+      return ' (' + day + ', ' + mon + ' ' + d.getDate() + ')';
+    }
+
     // ── Conversion core ──────────────────────────────────────────────────
 
     function parseH24(timeStr, ampmStr) {
@@ -361,10 +386,7 @@
       if (h12 === 0) h12 = 12;
 
       const outAbbr = getAbbr(toZoneId, usDST, euDST);
-      const dayNote = dayShift ===  1 ? ' (+1d)'
-                    : dayShift === -1 ? ' (-1d)' : '';
-
-      return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ampm + ' ' + outAbbr + dayNote;
+      return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ampm + ' ' + outAbbr + shiftDayLabel(dayShift);
     }
 
     // ── Text processing ──────────────────────────────────────────────────
@@ -394,10 +416,7 @@
     // Single-pass label replacement — longer patterns are listed first so they
     // win over their shorter sub-phrases in regex alternation, preventing
     // "India Time" from being re-processed after already being matched.
-    function replaceZoneLabels(text, toZoneId, usDST, euDST) {
-      const label      = TARGET_LABEL[toZoneId];
-      const targetAbbr = getAbbr(toZoneId, usDST, euDST);
-      const targetFlag = ZONE_FLAG[toZoneId];
+    function replaceZoneLabels(text, targetAbbr, label, targetFlag) {
 
       // Optional flag+space prefix consumed together with the phrase so the flag
       // is never doubled when input already has one (e.g. "🇮🇳 India Time" → one match)
@@ -499,13 +518,12 @@
           const outMin = totalMin % 60;
           const ap = outH24 < 12 ? 'AM' : 'PM';
           let h12 = outH24 % 12; if (h12 === 0) h12 = 12;
-          const note = dayShift === 1 ? ' (+1d)' : dayShift === -1 ? ' (-1d)' : '';
-          return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ap + ' ' + getAbbr(toZoneId, usDST, euDST) + note;
+          return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ap + ' ' + getAbbr(toZoneId, usDST, euDST) + shiftDayLabel(dayShift);
         });
       }
 
       // Pass 2: replace timezone label phrases and standalone abbreviations
-      return replaceZoneLabels(afterUnlabeled, toZoneId, usDST, euDST);
+      return replaceZoneLabels(afterUnlabeled, getAbbr(toZoneId, usDST, euDST), TARGET_LABEL[toZoneId], ZONE_FLAG[toZoneId]);
     }
 
     function countMatches(text) {
@@ -526,62 +544,59 @@
     // ── Timezone reference list (50 zones) ───────────────────────────────
 
     const TIMEZONE_LIST = [
-      // Americas
-      { g: 'Americas', label: 'UTC−10 · HST · Hawaii (USA)',                   abbr: 'HST',  iana: 'Pacific/Honolulu' },
-      { g: 'Americas', label: 'UTC−09 · AKST · Alaska (USA)',                  abbr: 'AKST', iana: 'America/Anchorage' },
-      { g: 'Americas', label: 'UTC−08 · PST/PDT · Pacific Time (US/Canada)',   abbr: 'PT',   iana: 'America/Los_Angeles' },
-      { g: 'Americas', label: 'UTC−07 · MST/MDT · Mountain Time (US/Canada)',  abbr: 'MT',   iana: 'America/Denver' },
-      { g: 'Americas', label: 'UTC−07 · MST · Arizona (no DST)',               abbr: 'MST',  iana: 'America/Phoenix' },
-      { g: 'Americas', label: 'UTC−06 · CST/CDT · Central Time (US/Canada)',   abbr: 'CT',   iana: 'America/Chicago' },
-      { g: 'Americas', label: 'UTC−06 · CST · Mexico City',                    abbr: 'CST',  iana: 'America/Mexico_City' },
-      { g: 'Americas', label: 'UTC−05 · EST/EDT · Eastern Time (US/Canada)',   abbr: 'ET',   iana: 'America/New_York' },
-      { g: 'Americas', label: 'UTC−05 · COT · Bogotá (Colombia)',              abbr: 'COT',  iana: 'America/Bogota' },
-      { g: 'Americas', label: 'UTC−05 · PET · Lima (Peru)',                    abbr: 'PET',  iana: 'America/Lima' },
-      { g: 'Americas', label: 'UTC−04 · AST · Atlantic Time (Canada)',          abbr: 'AST',  iana: 'America/Halifax' },
-      { g: 'Americas', label: 'UTC−04 · VET · Caracas (Venezuela)',            abbr: 'VET',  iana: 'America/Caracas' },
-      { g: 'Americas', label: 'UTC−03:30 · NST/NDT · Newfoundland (Canada)',   abbr: 'NST',  iana: 'America/St_Johns' },
-      { g: 'Americas', label: 'UTC−03 · BRT · São Paulo (Brazil)',             abbr: 'BRT',  iana: 'America/Sao_Paulo' },
-      { g: 'Americas', label: 'UTC−03 · ART · Buenos Aires (Argentina)',       abbr: 'ART',  iana: 'America/Argentina/Buenos_Aires' },
-      { g: 'Americas', label: 'UTC−03 · UYT · Montevideo (Uruguay)',           abbr: 'UYT',  iana: 'America/Montevideo' },
-      // Europe & Africa
-      { g: 'Europe & Africa', label: 'UTC+00 · UTC · Coordinated Universal Time', abbr: 'UTC',  iana: 'UTC' },
-      { g: 'Europe & Africa', label: 'UTC+00 · GMT · London (UK, winter)',      abbr: 'GMT',  iana: 'Europe/London' },
-      { g: 'Europe & Africa', label: 'UTC+01 · CET/CEST · Central Europe (Germany/France/Italy)', abbr: 'CET', iana: 'Europe/Berlin' },
-      { g: 'Europe & Africa', label: 'UTC+01 · WAT · West Africa (Nigeria/Ghana)',   abbr: 'WAT',  iana: 'Africa/Lagos' },
-      { g: 'Europe & Africa', label: 'UTC+02 · EET/EEST · Eastern Europe (Greece/Finland)', abbr: 'EET', iana: 'Europe/Helsinki' },
-      { g: 'Europe & Africa', label: 'UTC+02 · IST/IDT · Israel',              abbr: 'IST',  iana: 'Asia/Jerusalem' },
-      { g: 'Europe & Africa', label: 'UTC+02 · SAST · South Africa (Johannesburg)', abbr: 'SAST', iana: 'Africa/Johannesburg' },
-      { g: 'Europe & Africa', label: 'UTC+02 · CAT · Central Africa',          abbr: 'CAT',  iana: 'Africa/Harare' },
-      { g: 'Europe & Africa', label: 'UTC+03 · MSK · Moscow (Russia)',         abbr: 'MSK',  iana: 'Europe/Moscow' },
-      { g: 'Europe & Africa', label: 'UTC+03 · TRT · Turkey (Istanbul)',        abbr: 'TRT',  iana: 'Europe/Istanbul' },
-      { g: 'Europe & Africa', label: 'UTC+03 · ASA · Arabia Std (Saudi Arabia/Kuwait)', abbr: 'ASA', iana: 'Asia/Riyadh' },
-      { g: 'Europe & Africa', label: 'UTC+03 · EAT · East Africa (Kenya/Ethiopia)', abbr: 'EAT', iana: 'Africa/Nairobi' },
-      { g: 'Europe & Africa', label: 'UTC+03:30 · IRST/IRDT · Iran Standard Time', abbr: 'IRST', iana: 'Asia/Tehran' },
-      // Middle East & Asia
-      { g: 'Middle East & Asia', label: 'UTC+04 · GST · Gulf Std (Dubai / UAE)', abbr: 'GST',  iana: 'Asia/Dubai' },
-      { g: 'Middle East & Asia', label: 'UTC+04 · AMT · Yerevan (Armenia)',    abbr: 'AMT',  iana: 'Asia/Yerevan' },
-      { g: 'Middle East & Asia', label: 'UTC+04:30 · AFT · Afghanistan Time',  abbr: 'AFT',  iana: 'Asia/Kabul' },
-      { g: 'Middle East & Asia', label: 'UTC+05 · PKT · Pakistan Standard Time', abbr: 'PKT', iana: 'Asia/Karachi' },
-      { g: 'Middle East & Asia', label: 'UTC+05 · UZT · Tashkent (Uzbekistan)', abbr: 'UZT', iana: 'Asia/Tashkent' },
-      { g: 'Middle East & Asia', label: 'UTC+05:30 · IST · India Standard Time', abbr: 'IST', iana: 'Asia/Kolkata' },
-      { g: 'Middle East & Asia', label: 'UTC+05:45 · NPT · Nepal Time',        abbr: 'NPT',  iana: 'Asia/Kathmandu' },
-      { g: 'Middle East & Asia', label: 'UTC+06 · BST · Bangladesh Std Time',  abbr: 'BST',  iana: 'Asia/Dhaka' },
-      { g: 'Middle East & Asia', label: 'UTC+06:30 · MMT · Myanmar Time',      abbr: 'MMT',  iana: 'Asia/Yangon' },
-      { g: 'Middle East & Asia', label: 'UTC+07 · ICT · Indochina (Thailand/Vietnam)', abbr: 'ICT', iana: 'Asia/Bangkok' },
-      { g: 'Middle East & Asia', label: 'UTC+07 · WIB · Western Indonesia (Jakarta)', abbr: 'WIB', iana: 'Asia/Jakarta' },
-      // East Asia & Pacific
-      { g: 'East Asia & Pacific', label: 'UTC+08 · CST · China Standard Time', abbr: 'CST',  iana: 'Asia/Shanghai' },
-      { g: 'East Asia & Pacific', label: 'UTC+08 · SGT · Singapore Time',      abbr: 'SGT',  iana: 'Asia/Singapore' },
-      { g: 'East Asia & Pacific', label: 'UTC+08 · HKT · Hong Kong Time',      abbr: 'HKT',  iana: 'Asia/Hong_Kong' },
-      { g: 'East Asia & Pacific', label: 'UTC+08 · MYT · Malaysia (Kuala Lumpur)', abbr: 'MYT', iana: 'Asia/Kuala_Lumpur' },
-      { g: 'East Asia & Pacific', label: 'UTC+08 · PHT · Philippines (Manila)', abbr: 'PHT', iana: 'Asia/Manila' },
-      { g: 'East Asia & Pacific', label: 'UTC+08 · AWST · Australia Western (Perth)', abbr: 'AWST', iana: 'Australia/Perth' },
-      { g: 'East Asia & Pacific', label: 'UTC+09 · JST · Japan Standard Time', abbr: 'JST',  iana: 'Asia/Tokyo' },
-      { g: 'East Asia & Pacific', label: 'UTC+09 · KST · Korea Standard Time (Seoul)', abbr: 'KST', iana: 'Asia/Seoul' },
-      { g: 'East Asia & Pacific', label: 'UTC+09:30 · ACST/ACDT · Australia Central (Adelaide)', abbr: 'ACST', iana: 'Australia/Adelaide' },
-      { g: 'East Asia & Pacific', label: 'UTC+10 · AEST/AEDT · Australia Eastern (Sydney)', abbr: 'AEST', iana: 'Australia/Sydney' },
-      { g: 'East Asia & Pacific', label: 'UTC+12 · NZST/NZDT · New Zealand (Auckland)', abbr: 'NZST', iana: 'Pacific/Auckland' },
-      { g: 'East Asia & Pacific', label: 'UTC+12 · FJT · Fiji Time',           abbr: 'FJT',  iana: 'Pacific/Fiji' },
+      // g=group, abbr=abbreviation, iana=IANA key, flag=emoji, short=display label for preview
+      { g:'Americas', label:'UTC−10 · HST · Hawaii (USA)',                    abbr:'HST',  iana:'Pacific/Honolulu',                    flag:'🇺🇸', short:'Hawaii Time' },
+      { g:'Americas', label:'UTC−09 · AKST · Alaska (USA)',                   abbr:'AKST', iana:'America/Anchorage',                   flag:'🇺🇸', short:'Alaska Time' },
+      { g:'Americas', label:'UTC−08 · PST/PDT · Pacific Time (US/Canada)',    abbr:'PT',   iana:'America/Los_Angeles',                 flag:'🇺🇸', short:'US Pacific Time' },
+      { g:'Americas', label:'UTC−07 · MST/MDT · Mountain Time (US/Canada)',   abbr:'MT',   iana:'America/Denver',                      flag:'🇺🇸', short:'US Mountain Time' },
+      { g:'Americas', label:'UTC−07 · MST · Arizona (no DST)',                abbr:'MST',  iana:'America/Phoenix',                     flag:'🇺🇸', short:'Arizona Time' },
+      { g:'Americas', label:'UTC−06 · CST/CDT · Central Time (US/Canada)',    abbr:'CT',   iana:'America/Chicago',                     flag:'🇺🇸', short:'US Central Time' },
+      { g:'Americas', label:'UTC−06 · CST · Mexico City',                     abbr:'CST',  iana:'America/Mexico_City',                 flag:'🇲🇽', short:'Mexico City Time' },
+      { g:'Americas', label:'UTC−05 · EST/EDT · Eastern Time (US/Canada)',    abbr:'ET',   iana:'America/New_York',                    flag:'🇺🇸', short:'US Eastern Time' },
+      { g:'Americas', label:'UTC−05 · COT · Bogotá (Colombia)',               abbr:'COT',  iana:'America/Bogota',                      flag:'🇨🇴', short:'Colombia Time' },
+      { g:'Americas', label:'UTC−05 · PET · Lima (Peru)',                     abbr:'PET',  iana:'America/Lima',                        flag:'🇵🇪', short:'Peru Time' },
+      { g:'Americas', label:'UTC−04 · AST · Atlantic Time (Canada)',           abbr:'AST',  iana:'America/Halifax',                     flag:'🇨🇦', short:'Atlantic Time' },
+      { g:'Americas', label:'UTC−04 · VET · Caracas (Venezuela)',             abbr:'VET',  iana:'America/Caracas',                     flag:'🇻🇪', short:'Venezuela Time' },
+      { g:'Americas', label:'UTC−03:30 · NST/NDT · Newfoundland (Canada)',    abbr:'NST',  iana:'America/St_Johns',                    flag:'🇨🇦', short:'Newfoundland Time' },
+      { g:'Americas', label:'UTC−03 · BRT · São Paulo (Brazil)',              abbr:'BRT',  iana:'America/Sao_Paulo',                   flag:'🇧🇷', short:'Brazil Time' },
+      { g:'Americas', label:'UTC−03 · ART · Buenos Aires (Argentina)',        abbr:'ART',  iana:'America/Argentina/Buenos_Aires',      flag:'🇦🇷', short:'Argentina Time' },
+      { g:'Americas', label:'UTC−03 · UYT · Montevideo (Uruguay)',            abbr:'UYT',  iana:'America/Montevideo',                  flag:'🇺🇾', short:'Uruguay Time' },
+      { g:'Europe & Africa', label:'UTC+00 · UTC · Coordinated Universal Time', abbr:'UTC', iana:'UTC',                               flag:'🌐',  short:'UTC' },
+      { g:'Europe & Africa', label:'UTC+00 · GMT · London (UK)',               abbr:'GMT',  iana:'Europe/London',                      flag:'🇬🇧', short:'London Time' },
+      { g:'Europe & Africa', label:'UTC+01 · CET/CEST · Central Europe (Germany/France)', abbr:'CET', iana:'Europe/Berlin',           flag:'🇩🇪', short:'Central European Time' },
+      { g:'Europe & Africa', label:'UTC+01 · WAT · West Africa (Nigeria/Ghana)', abbr:'WAT', iana:'Africa/Lagos',                    flag:'🇳🇬', short:'West Africa Time' },
+      { g:'Europe & Africa', label:'UTC+02 · EET/EEST · Eastern Europe (Greece/Finland)', abbr:'EET', iana:'Europe/Helsinki',         flag:'🇫🇮', short:'Eastern European Time' },
+      { g:'Europe & Africa', label:'UTC+02 · IST/IDT · Israel',               abbr:'IST',  iana:'Asia/Jerusalem',                     flag:'🇮🇱', short:'Israel Time' },
+      { g:'Europe & Africa', label:'UTC+02 · SAST · South Africa (Johannesburg)', abbr:'SAST', iana:'Africa/Johannesburg',            flag:'🇿🇦', short:'South Africa Time' },
+      { g:'Europe & Africa', label:'UTC+02 · CAT · Central Africa',           abbr:'CAT',  iana:'Africa/Harare',                      flag:'🇿🇼', short:'Central Africa Time' },
+      { g:'Europe & Africa', label:'UTC+03 · MSK · Moscow (Russia)',          abbr:'MSK',  iana:'Europe/Moscow',                      flag:'🇷🇺', short:'Moscow Time' },
+      { g:'Europe & Africa', label:'UTC+03 · TRT · Turkey (Istanbul)',         abbr:'TRT',  iana:'Europe/Istanbul',                    flag:'🇹🇷', short:'Turkey Time' },
+      { g:'Europe & Africa', label:'UTC+03 · ASA · Arabia Std (Saudi Arabia)', abbr:'ASA', iana:'Asia/Riyadh',                        flag:'🇸🇦', short:'Arabia Standard Time' },
+      { g:'Europe & Africa', label:'UTC+03 · EAT · East Africa (Kenya/Ethiopia)', abbr:'EAT', iana:'Africa/Nairobi',                 flag:'🇰🇪', short:'East Africa Time' },
+      { g:'Europe & Africa', label:'UTC+03:30 · IRST/IRDT · Iran Standard Time', abbr:'IRST', iana:'Asia/Tehran',                   flag:'🇮🇷', short:'Iran Time' },
+      { g:'Middle East & Asia', label:'UTC+04 · GST · Gulf Std (Dubai / UAE)', abbr:'GST',  iana:'Asia/Dubai',                       flag:'🇦🇪', short:'Gulf Standard Time' },
+      { g:'Middle East & Asia', label:'UTC+04 · AMT · Yerevan (Armenia)',     abbr:'AMT',  iana:'Asia/Yerevan',                       flag:'🇦🇲', short:'Armenia Time' },
+      { g:'Middle East & Asia', label:'UTC+04:30 · AFT · Afghanistan Time',   abbr:'AFT',  iana:'Asia/Kabul',                         flag:'🇦🇫', short:'Afghanistan Time' },
+      { g:'Middle East & Asia', label:'UTC+05 · PKT · Pakistan Standard Time', abbr:'PKT', iana:'Asia/Karachi',                      flag:'🇵🇰', short:'Pakistan Time' },
+      { g:'Middle East & Asia', label:'UTC+05 · UZT · Tashkent (Uzbekistan)', abbr:'UZT',  iana:'Asia/Tashkent',                     flag:'🇺🇿', short:'Uzbekistan Time' },
+      { g:'Middle East & Asia', label:'UTC+05:30 · IST · India Standard Time', abbr:'IST', iana:'Asia/Kolkata',                      flag:'🇮🇳', short:'India Standard Time' },
+      { g:'Middle East & Asia', label:'UTC+05:45 · NPT · Nepal Time',         abbr:'NPT',  iana:'Asia/Kathmandu',                     flag:'🇳🇵', short:'Nepal Time' },
+      { g:'Middle East & Asia', label:'UTC+06 · BST · Bangladesh Std Time',   abbr:'BST',  iana:'Asia/Dhaka',                         flag:'🇧🇩', short:'Bangladesh Time' },
+      { g:'Middle East & Asia', label:'UTC+06:30 · MMT · Myanmar Time',       abbr:'MMT',  iana:'Asia/Yangon',                        flag:'🇲🇲', short:'Myanmar Time' },
+      { g:'Middle East & Asia', label:'UTC+07 · ICT · Indochina (Thailand/Vietnam)', abbr:'ICT', iana:'Asia/Bangkok',               flag:'🇹🇭', short:'Indochina Time' },
+      { g:'Middle East & Asia', label:'UTC+07 · WIB · Western Indonesia (Jakarta)', abbr:'WIB', iana:'Asia/Jakarta',               flag:'🇮🇩', short:'Western Indonesia Time' },
+      { g:'East Asia & Pacific', label:'UTC+08 · CST · China Standard Time',  abbr:'CST',  iana:'Asia/Shanghai',                     flag:'🇨🇳', short:'China Standard Time' },
+      { g:'East Asia & Pacific', label:'UTC+08 · SGT · Singapore Time',       abbr:'SGT',  iana:'Asia/Singapore',                    flag:'🇸🇬', short:'Singapore Time' },
+      { g:'East Asia & Pacific', label:'UTC+08 · HKT · Hong Kong Time',       abbr:'HKT',  iana:'Asia/Hong_Kong',                    flag:'🇭🇰', short:'Hong Kong Time' },
+      { g:'East Asia & Pacific', label:'UTC+08 · MYT · Malaysia (Kuala Lumpur)', abbr:'MYT', iana:'Asia/Kuala_Lumpur',              flag:'🇲🇾', short:'Malaysia Time' },
+      { g:'East Asia & Pacific', label:'UTC+08 · PHT · Philippines (Manila)',  abbr:'PHT',  iana:'Asia/Manila',                       flag:'🇵🇭', short:'Philippines Time' },
+      { g:'East Asia & Pacific', label:'UTC+08 · AWST · Australia Western (Perth)', abbr:'AWST', iana:'Australia/Perth',            flag:'🇦🇺', short:'Australia Western Time' },
+      { g:'East Asia & Pacific', label:'UTC+09 · JST · Japan Standard Time',  abbr:'JST',  iana:'Asia/Tokyo',                        flag:'🇯🇵', short:'Japan Standard Time' },
+      { g:'East Asia & Pacific', label:'UTC+09 · KST · Korea Standard Time',  abbr:'KST',  iana:'Asia/Seoul',                        flag:'🇰🇷', short:'Korea Standard Time' },
+      { g:'East Asia & Pacific', label:'UTC+09:30 · ACST/ACDT · Australia Central (Adelaide)', abbr:'ACST', iana:'Australia/Adelaide', flag:'🇦🇺', short:'Australia Central Time' },
+      { g:'East Asia & Pacific', label:'UTC+10 · AEST/AEDT · Australia Eastern (Sydney)', abbr:'AEST', iana:'Australia/Sydney',     flag:'🇦🇺', short:'Australia Eastern Time' },
+      { g:'East Asia & Pacific', label:'UTC+12 · NZST/NZDT · New Zealand (Auckland)', abbr:'NZST', iana:'Pacific/Auckland',         flag:'🇳🇿', short:'New Zealand Time' },
+      { g:'East Asia & Pacific', label:'UTC+12 · FJT · Fiji Time',            abbr:'FJT',  iana:'Pacific/Fiji',                      flag:'🇫🇯', short:'Fiji Time' },
     ];
 
     // Get current UTC offset in minutes for any IANA timezone (DST-aware via Intl API)
@@ -615,13 +630,20 @@
       const sel  = document.getElementById('tzSelect');
       const iana = sel.value;
       const el   = document.getElementById('tzNow');
-      if (!iana) { el.className = 'tz-now'; el.textContent = ''; return; }
+      if (!iana) {
+        el.className = 'tz-now'; el.textContent = '';
+        const card = document.getElementById('previewCard');
+        card.className = ''; card.innerHTML = '';
+        return;
+      }
       const abbr = sel.options[sel.selectedIndex].dataset.abbr;
       const time = new Date().toLocaleTimeString('en-US', {
         timeZone: iana, hour: 'numeric', minute: '2-digit', hour12: true
       });
       el.textContent = 'Now: ' + time + ' ' + abbr;
       el.className = 'tz-now show';
+      const tz = TIMEZONE_LIST.find(t => t.iana === iana);
+      if (tz) renderPreviewCard(tz, document.getElementById('inputText').value);
     }
 
     // Match times with AM/PM that are NOT already followed by a TZ abbreviation
@@ -631,6 +653,79 @@
         '\\b(\\d{1,2}(?::\\d{2})?)\\s*([AaPp][Mm])(?!\\s*(?:' + TZ + ')\\b)',
         'g'
       );
+    }
+
+    // ── Dropdown preview ─────────────────────────────────────────────────
+
+    // Like convertTime() but takes a direct UTC offset (in minutes) as the target
+    // instead of a fixed zone ID — used for arbitrary IANA timezones from the dropdown.
+    function convertTimeByOffset(timeStr, ampmStr, fromAbbr, toOffsetMin, toAbbr) {
+      const fromOff = inputToOffset(fromAbbr, _usDST, _euDST);
+      if (fromOff === null) return null;
+      const { h, m } = parseH24(timeStr, ampmStr);
+      let totalMin = h * 60 + m - fromOff + toOffsetMin;
+      const dayShift = totalMin < 0 ? -1 : totalMin >= 1440 ? 1 : 0;
+      totalMin = ((totalMin % 1440) + 1440) % 1440;
+      const outH24 = Math.floor(totalMin / 60);
+      const outMin = totalMin % 60;
+      const ap = outH24 < 12 ? 'AM' : 'PM';
+      let h12 = outH24 % 12; if (h12 === 0) h12 = 12;
+      return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ap + ' ' + toAbbr + shiftDayLabel(dayShift);
+    }
+
+    function buildPreviewText(inputText, toOffsetMin, toAbbr, toLabel, toFlag) {
+      const timesConverted = inputText.replace(makePattern(), (match,
+        r_t1, r_ap1, r_t2, r_ap2, r_tz,
+        s_t,  s_ap,  s_tz,
+        h_t,  h_ap,  h_tz
+      ) => {
+        if (r_t1 !== undefined) {
+          const startAP = r_ap1 || r_ap2;
+          const start = convertTimeByOffset(r_t1, startAP, r_tz, toOffsetMin, toAbbr);
+          const end   = convertTimeByOffset(r_t2, r_ap2,   r_tz, toOffsetMin, toAbbr);
+          return (start && end) ? start + ' – ' + end : match;
+        }
+        if (s_t !== undefined) {
+          return convertTimeByOffset(s_t, s_ap, s_tz, toOffsetMin, toAbbr) || match;
+        }
+        return convertTimeByOffset(h_t, h_ap, h_tz, toOffsetMin, toAbbr) || match;
+      });
+      return replaceZoneLabels(timesConverted, toAbbr, toLabel, toFlag);
+    }
+
+    function renderPreviewCard(tz, inputText) {
+      const card = document.getElementById('previewCard');
+      if (!tz || !inputText.trim()) {
+        card.className = '';
+        card.innerHTML = '';
+        return;
+      }
+      const toOffsetMin = getIANAOffsetMinutes(tz.iana);
+      const converted   = buildPreviewText(inputText, toOffsetMin, tz.abbr, tz.short, tz.flag);
+      card.className = 'output-card preview-card';
+      card.innerHTML =
+        '<div class="preview-zone-note">Preview for selected timezone</div>' +
+        '<div class="output-header">' +
+          '<div class="zone-info">' +
+            '<span class="zone-flag">' + tz.flag + '</span>' +
+            '<div class="zone-text">' +
+              '<span class="zone-label">' + tz.short + '</span>' +
+              '<span class="zone-abbr">'  + tz.abbr  + '</span>' +
+              '<span class="zone-offset">' + offsetLabel(toOffsetMin) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<button class="btn-copy" id="previewCopyBtn" onclick="copyPreview()">Copy</button>' +
+        '</div>' +
+        '<div class="output-text" id="previewOut"></div>';
+      const out = document.getElementById('previewOut');
+      out.dataset.plain = converted;
+      out.innerHTML = escapeHtml(converted);
+      twemoji.parse(out, { folder: 'svg', ext: '.svg' });
+      twemoji.parse(card, { folder: 'svg', ext: '.svg' });
+    }
+
+    function copyPreview() {
+      copyOutput('previewOut', document.getElementById('previewCopyBtn'));
     }
 
     // ── Bootstrap ────────────────────────────────────────────────────────
@@ -724,6 +819,10 @@
 
       // Also re-parse the card headers (zone flags)
       twemoji.parse(container, { folder: 'svg', ext: '.svg' });
+
+      // Refresh preview card for the selected dropdown timezone (if any)
+      const tz = selTz ? TIMEZONE_LIST.find(t => t.iana === selTz) : null;
+      if (tz) renderPreviewCard(tz, input);
 
       container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
