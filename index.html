@@ -167,6 +167,47 @@
       margin-bottom: 12px;
       font-weight: 500;
     }
+    .tz-picker {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #eef0f8;
+    }
+    .tz-picker > label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: block;
+      margin-bottom: 7px;
+    }
+    .tz-picker > label em { color: #aaa; font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .tz-picker-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    #tzSelect {
+      flex: 1;
+      min-width: 220px;
+      max-width: 500px;
+      border: 1.5px solid #d0d5e0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+    }
+    #tzSelect:focus { outline: none; border-color: #5c6bc0; box-shadow: 0 0 0 3px rgba(92,107,192,0.12); }
+    .tz-now {
+      font-size: 0.83rem;
+      color: #5c6bc0;
+      font-weight: 600;
+      padding: 5px 12px;
+      background: #eef0fb;
+      border-radius: 20px;
+      display: none;
+      white-space: nowrap;
+    }
+    .tz-now.show { display: inline-block; }
   </style>
 </head>
 <body>
@@ -186,6 +227,15 @@
       <div class="toolbar">
         <button class="btn-generate" onclick="generate()">Generate</button>
         <div class="dst-badge" id="dstBadge">Calculating DST…</div>
+      </div>
+      <div class="tz-picker">
+        <label for="tzSelect">Timezone reference <em>— pick one to see its current time; also used as fallback for times without explicit labels</em></label>
+        <div class="tz-picker-row">
+          <select id="tzSelect" onchange="onTzSelect()">
+            <option value="">— choose a timezone —</option>
+          </select>
+          <span class="tz-now" id="tzNow"></span>
+        </div>
       </div>
     </div>
 
@@ -417,8 +467,8 @@
       );
     }
 
-    function processText(text, toZoneId, usDST, euDST) {
-      // Pass 1: convert timestamps
+    function processText(text, toZoneId, usDST, euDST, fallbackOffsetMin = null) {
+      // Pass 1: convert timestamps with explicit TZ labels
       const timesConverted = text.replace(makePattern(), (match,
         r_t1, r_ap1, r_t2, r_ap2, r_tz,   // (A) range groups
         s_t,  s_ap,  s_tz,                 // (B) single+AMPM groups
@@ -436,8 +486,26 @@
         }
         return convertTime(h_t, h_ap, h_tz, toZoneId, usDST, euDST) || match;
       });
+      // Pass 1b: convert unlabeled times using the dropdown fallback timezone
+      let afterUnlabeled = timesConverted;
+      if (fallbackOffsetMin !== null) {
+        afterUnlabeled = timesConverted.replace(makeUnlabeledPattern(), (match, timeStr, ampmStr) => {
+          const { h, m } = parseH24(timeStr, ampmStr);
+          const toOff   = getOffset(toZoneId, usDST, euDST);
+          let totalMin  = h * 60 + m - fallbackOffsetMin + toOff;
+          const dayShift = totalMin < 0 ? -1 : totalMin >= 1440 ? 1 : 0;
+          totalMin = ((totalMin % 1440) + 1440) % 1440;
+          const outH24 = Math.floor(totalMin / 60);
+          const outMin = totalMin % 60;
+          const ap = outH24 < 12 ? 'AM' : 'PM';
+          let h12 = outH24 % 12; if (h12 === 0) h12 = 12;
+          const note = dayShift === 1 ? ' (+1d)' : dayShift === -1 ? ' (-1d)' : '';
+          return h12 + ':' + String(outMin).padStart(2, '0') + ' ' + ap + ' ' + getAbbr(toZoneId, usDST, euDST) + note;
+        });
+      }
+
       // Pass 2: replace timezone label phrases and standalone abbreviations
-      return replaceZoneLabels(timesConverted, toZoneId, usDST, euDST);
+      return replaceZoneLabels(afterUnlabeled, toZoneId, usDST, euDST);
     }
 
     function countMatches(text) {
@@ -455,11 +523,123 @@
       { id: 'CET', label: 'Central European Time (Germany)', flag: '🇩🇪' },
     ];
 
+    // ── Timezone reference list (50 zones) ───────────────────────────────
+
+    const TIMEZONE_LIST = [
+      // Americas
+      { g: 'Americas', label: 'UTC−10 · HST · Hawaii (USA)',                   abbr: 'HST',  iana: 'Pacific/Honolulu' },
+      { g: 'Americas', label: 'UTC−09 · AKST · Alaska (USA)',                  abbr: 'AKST', iana: 'America/Anchorage' },
+      { g: 'Americas', label: 'UTC−08 · PST/PDT · Pacific Time (US/Canada)',   abbr: 'PT',   iana: 'America/Los_Angeles' },
+      { g: 'Americas', label: 'UTC−07 · MST/MDT · Mountain Time (US/Canada)',  abbr: 'MT',   iana: 'America/Denver' },
+      { g: 'Americas', label: 'UTC−07 · MST · Arizona (no DST)',               abbr: 'MST',  iana: 'America/Phoenix' },
+      { g: 'Americas', label: 'UTC−06 · CST/CDT · Central Time (US/Canada)',   abbr: 'CT',   iana: 'America/Chicago' },
+      { g: 'Americas', label: 'UTC−06 · CST · Mexico City',                    abbr: 'CST',  iana: 'America/Mexico_City' },
+      { g: 'Americas', label: 'UTC−05 · EST/EDT · Eastern Time (US/Canada)',   abbr: 'ET',   iana: 'America/New_York' },
+      { g: 'Americas', label: 'UTC−05 · COT · Bogotá (Colombia)',              abbr: 'COT',  iana: 'America/Bogota' },
+      { g: 'Americas', label: 'UTC−05 · PET · Lima (Peru)',                    abbr: 'PET',  iana: 'America/Lima' },
+      { g: 'Americas', label: 'UTC−04 · AST · Atlantic Time (Canada)',          abbr: 'AST',  iana: 'America/Halifax' },
+      { g: 'Americas', label: 'UTC−04 · VET · Caracas (Venezuela)',            abbr: 'VET',  iana: 'America/Caracas' },
+      { g: 'Americas', label: 'UTC−03:30 · NST/NDT · Newfoundland (Canada)',   abbr: 'NST',  iana: 'America/St_Johns' },
+      { g: 'Americas', label: 'UTC−03 · BRT · São Paulo (Brazil)',             abbr: 'BRT',  iana: 'America/Sao_Paulo' },
+      { g: 'Americas', label: 'UTC−03 · ART · Buenos Aires (Argentina)',       abbr: 'ART',  iana: 'America/Argentina/Buenos_Aires' },
+      { g: 'Americas', label: 'UTC−03 · UYT · Montevideo (Uruguay)',           abbr: 'UYT',  iana: 'America/Montevideo' },
+      // Europe & Africa
+      { g: 'Europe & Africa', label: 'UTC+00 · UTC · Coordinated Universal Time', abbr: 'UTC',  iana: 'UTC' },
+      { g: 'Europe & Africa', label: 'UTC+00 · GMT · London (UK, winter)',      abbr: 'GMT',  iana: 'Europe/London' },
+      { g: 'Europe & Africa', label: 'UTC+01 · CET/CEST · Central Europe (Germany/France/Italy)', abbr: 'CET', iana: 'Europe/Berlin' },
+      { g: 'Europe & Africa', label: 'UTC+01 · WAT · West Africa (Nigeria/Ghana)',   abbr: 'WAT',  iana: 'Africa/Lagos' },
+      { g: 'Europe & Africa', label: 'UTC+02 · EET/EEST · Eastern Europe (Greece/Finland)', abbr: 'EET', iana: 'Europe/Helsinki' },
+      { g: 'Europe & Africa', label: 'UTC+02 · IST/IDT · Israel',              abbr: 'IST',  iana: 'Asia/Jerusalem' },
+      { g: 'Europe & Africa', label: 'UTC+02 · SAST · South Africa (Johannesburg)', abbr: 'SAST', iana: 'Africa/Johannesburg' },
+      { g: 'Europe & Africa', label: 'UTC+02 · CAT · Central Africa',          abbr: 'CAT',  iana: 'Africa/Harare' },
+      { g: 'Europe & Africa', label: 'UTC+03 · MSK · Moscow (Russia)',         abbr: 'MSK',  iana: 'Europe/Moscow' },
+      { g: 'Europe & Africa', label: 'UTC+03 · TRT · Turkey (Istanbul)',        abbr: 'TRT',  iana: 'Europe/Istanbul' },
+      { g: 'Europe & Africa', label: 'UTC+03 · ASA · Arabia Std (Saudi Arabia/Kuwait)', abbr: 'ASA', iana: 'Asia/Riyadh' },
+      { g: 'Europe & Africa', label: 'UTC+03 · EAT · East Africa (Kenya/Ethiopia)', abbr: 'EAT', iana: 'Africa/Nairobi' },
+      { g: 'Europe & Africa', label: 'UTC+03:30 · IRST/IRDT · Iran Standard Time', abbr: 'IRST', iana: 'Asia/Tehran' },
+      // Middle East & Asia
+      { g: 'Middle East & Asia', label: 'UTC+04 · GST · Gulf Std (Dubai / UAE)', abbr: 'GST',  iana: 'Asia/Dubai' },
+      { g: 'Middle East & Asia', label: 'UTC+04 · AMT · Yerevan (Armenia)',    abbr: 'AMT',  iana: 'Asia/Yerevan' },
+      { g: 'Middle East & Asia', label: 'UTC+04:30 · AFT · Afghanistan Time',  abbr: 'AFT',  iana: 'Asia/Kabul' },
+      { g: 'Middle East & Asia', label: 'UTC+05 · PKT · Pakistan Standard Time', abbr: 'PKT', iana: 'Asia/Karachi' },
+      { g: 'Middle East & Asia', label: 'UTC+05 · UZT · Tashkent (Uzbekistan)', abbr: 'UZT', iana: 'Asia/Tashkent' },
+      { g: 'Middle East & Asia', label: 'UTC+05:30 · IST · India Standard Time', abbr: 'IST', iana: 'Asia/Kolkata' },
+      { g: 'Middle East & Asia', label: 'UTC+05:45 · NPT · Nepal Time',        abbr: 'NPT',  iana: 'Asia/Kathmandu' },
+      { g: 'Middle East & Asia', label: 'UTC+06 · BST · Bangladesh Std Time',  abbr: 'BST',  iana: 'Asia/Dhaka' },
+      { g: 'Middle East & Asia', label: 'UTC+06:30 · MMT · Myanmar Time',      abbr: 'MMT',  iana: 'Asia/Yangon' },
+      { g: 'Middle East & Asia', label: 'UTC+07 · ICT · Indochina (Thailand/Vietnam)', abbr: 'ICT', iana: 'Asia/Bangkok' },
+      { g: 'Middle East & Asia', label: 'UTC+07 · WIB · Western Indonesia (Jakarta)', abbr: 'WIB', iana: 'Asia/Jakarta' },
+      // East Asia & Pacific
+      { g: 'East Asia & Pacific', label: 'UTC+08 · CST · China Standard Time', abbr: 'CST',  iana: 'Asia/Shanghai' },
+      { g: 'East Asia & Pacific', label: 'UTC+08 · SGT · Singapore Time',      abbr: 'SGT',  iana: 'Asia/Singapore' },
+      { g: 'East Asia & Pacific', label: 'UTC+08 · HKT · Hong Kong Time',      abbr: 'HKT',  iana: 'Asia/Hong_Kong' },
+      { g: 'East Asia & Pacific', label: 'UTC+08 · MYT · Malaysia (Kuala Lumpur)', abbr: 'MYT', iana: 'Asia/Kuala_Lumpur' },
+      { g: 'East Asia & Pacific', label: 'UTC+08 · PHT · Philippines (Manila)', abbr: 'PHT', iana: 'Asia/Manila' },
+      { g: 'East Asia & Pacific', label: 'UTC+08 · AWST · Australia Western (Perth)', abbr: 'AWST', iana: 'Australia/Perth' },
+      { g: 'East Asia & Pacific', label: 'UTC+09 · JST · Japan Standard Time', abbr: 'JST',  iana: 'Asia/Tokyo' },
+      { g: 'East Asia & Pacific', label: 'UTC+09 · KST · Korea Standard Time (Seoul)', abbr: 'KST', iana: 'Asia/Seoul' },
+      { g: 'East Asia & Pacific', label: 'UTC+09:30 · ACST/ACDT · Australia Central (Adelaide)', abbr: 'ACST', iana: 'Australia/Adelaide' },
+      { g: 'East Asia & Pacific', label: 'UTC+10 · AEST/AEDT · Australia Eastern (Sydney)', abbr: 'AEST', iana: 'Australia/Sydney' },
+      { g: 'East Asia & Pacific', label: 'UTC+12 · NZST/NZDT · New Zealand (Auckland)', abbr: 'NZST', iana: 'Pacific/Auckland' },
+      { g: 'East Asia & Pacific', label: 'UTC+12 · FJT · Fiji Time',           abbr: 'FJT',  iana: 'Pacific/Fiji' },
+    ];
+
+    // Get current UTC offset in minutes for any IANA timezone (DST-aware via Intl API)
+    function getIANAOffsetMinutes(iana) {
+      const now = new Date();
+      const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const tzDate  = new Date(now.toLocaleString('en-US', { timeZone: iana }));
+      return Math.round((tzDate - utcDate) / 60000);
+    }
+
+    function buildTimezoneDropdown() {
+      const sel = document.getElementById('tzSelect');
+      let curGroup = '';
+      let optgroup;
+      for (const tz of TIMEZONE_LIST) {
+        if (tz.g !== curGroup) {
+          optgroup = document.createElement('optgroup');
+          optgroup.label = tz.g;
+          sel.appendChild(optgroup);
+          curGroup = tz.g;
+        }
+        const opt = document.createElement('option');
+        opt.value = tz.iana;
+        opt.dataset.abbr = tz.abbr;
+        opt.textContent  = tz.label;
+        optgroup.appendChild(opt);
+      }
+    }
+
+    function onTzSelect() {
+      const sel  = document.getElementById('tzSelect');
+      const iana = sel.value;
+      const el   = document.getElementById('tzNow');
+      if (!iana) { el.className = 'tz-now'; el.textContent = ''; return; }
+      const abbr = sel.options[sel.selectedIndex].dataset.abbr;
+      const time = new Date().toLocaleTimeString('en-US', {
+        timeZone: iana, hour: 'numeric', minute: '2-digit', hour12: true
+      });
+      el.textContent = 'Now: ' + time + ' ' + abbr;
+      el.className = 'tz-now show';
+    }
+
+    // Match times with AM/PM that are NOT already followed by a TZ abbreviation
+    // (used when a fallback input timezone is selected in the dropdown)
+    function makeUnlabeledPattern() {
+      return new RegExp(
+        '\\b(\\d{1,2}(?::\\d{2})?)\\s*([AaPp][Mm])(?!\\s*(?:' + TZ + ')\\b)',
+        'g'
+      );
+    }
+
     // ── Bootstrap ────────────────────────────────────────────────────────
 
     const _now   = new Date();
     const _usDST = isUSDST(_now);
     const _euDST = isEUDST(_now);
+
+    buildTimezoneDropdown();
 
     (function updateDSTBadge() {
       const fmt = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -500,8 +680,11 @@
         container.appendChild(countEl);
       }
 
+      const selTz     = document.getElementById('tzSelect').value;
+      const fallback  = selTz ? getIANAOffsetMinutes(selTz) : null;
+
       ZONES.forEach(zone => {
-        const converted = processText(input, zone.id, _usDST, _euDST);
+        const converted = processText(input, zone.id, _usDST, _euDST, fallback);
         const abbr      = getAbbr(zone.id, _usDST, _euDST);
         const offset    = getOffset(zone.id, _usDST, _euDST);
         const uid       = 'out-' + zone.id;
